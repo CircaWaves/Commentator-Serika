@@ -1,8 +1,8 @@
 ================================================================================
 # PROJECT BUNDLE
 Root: C:\CODINGS\Commentator-1
-Generated: 2025-09-23T19:34:04.680Z
-Files: 15
+Generated: 2025-09-23T20:17:18.493Z
+Files: 13
 ================================================================================
 
 ======================= FILE: gemini-relay/src/index.js ========================
@@ -53,7 +53,7 @@ export default {
 
 
 ================================ FILE: main.js =================================
-(size: 17344 bytes)
+(size: 19096 bytes)
 
 // main.js (CJS-friendly with dynamic import, overlay fullscreen & click-through)
 const { app, BrowserWindow, desktopCapturer, screen, globalShortcut, ipcMain } = require('electron');
@@ -80,6 +80,7 @@ const PROMPT_VERSION = 'v3-system-user-split';
 let overlayWindow = null;
 let store = null;
 let inputWindow = null;
+let inputAnchor = 'left';
 
 // lazy-load ESM module (@google/generative-ai)
 let _genaiModule = null;
@@ -284,7 +285,7 @@ function buildSystemInstruction() {
     '- 이전 답변과 발화 맥락이 동일하다면 텍스트에 대해 심층 분석해 새로운 관점에서의 질문, 어려운 개념에 대한 해설, 평가와 제안 중 한 성격의 코멘트를 반환하라.',
     '',
     '[역할 내용]',
-    '블루 아카이브의 키류 키쿄로서 응답하라. 상식·논리·이성을 중시하는 냉정한 전략가. 무엇보다 아군(샬레와 백화요란)의 안전을 최우선으로 챙기는 “차가운데 다정한” 타입.',
+    '블루 아카이브의 키류 키쿄로서 응답하라. 상식·논리·이성을 중시하는 냉정한 전략가. 무엇보다 아군(샬레와 백화요란)의 안전을 최우선으로 챙기는 “차가운데 다정한” 타입. 선생을 좋아하고 티내고 싶어하지만, 그 방식이 서투름.',
     '',
     '[금지/주의]',
     // '- 사용자가 구체적인 질문에 답해야 하는 코멘트는 금지',
@@ -403,16 +404,22 @@ function openInputWindow(iconRect) {
  const o = overlayWindow.getBounds();
  const PAD = 16;
  const GAP = 12;
- const winW = 340;
- const winH = 48;
+ const winW = 180;
+ const winH = 44;
 
- // 기본: 아이콘 오른쪽
+  // 기본: 아이콘 오른쪽
  let x = o.x + Math.round(iconRect.left + iconRect.width + GAP);
+
  let y = o.y + Math.round(iconRect.top + (iconRect.height - winH) / 2);
 
  // 우측 공간 부족 시 왼쪽으로 플립
  if (x + winW > o.x + o.width - PAD) {
- x = o.x + Math.round(iconRect.left - GAP - winW);
+   // 아이콘 왼쪽에 배치
+   x = o.x + Math.round(iconRect.left - GAP - winW);
+   inputAnchor = 'right'; // 오른쪽 엣지를 고정(=왼쪽으로 확장)
+ } else {
+   // 아이콘 오른쪽에 배치
+   inputAnchor = 'left';  // 왼쪽 엣지를 고정(=오른쪽으로 확장)
  }
  // 화면 경계 보정
  x = Math.max(o.x + PAD, Math.min(x, o.x + o.width - PAD - winW));
@@ -426,7 +433,7 @@ function openInputWindow(iconRect) {
  frame: false,
  transparent: true,
  resizable: false,
- hasShadow: true,
+ hasShadow: false,
  focusable: true,
  skipTaskbar: true,
  fullscreenable: false,
@@ -438,7 +445,10 @@ function openInputWindow(iconRect) {
  sandbox: true,
  }
  });
- inputWindow.setAlwaysOnTop(true, 'screen-saver');
+  inputWindow.setAlwaysOnTop(true, 'screen-saver');
+  if (inputWindow.setVisibleOnAllWorkspaces) {
+    inputWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  }
  inputWindow.loadFile(path.join(__dirname, 'renderer', 'input.html'));
  inputWindow.on('closed', () => { inputWindow = null; });
 }
@@ -446,6 +456,40 @@ function openInputWindow(iconRect) {
 ipcMain.handle('input:open', (_evt, iconRect) => {
  openInputWindow(iconRect || { left: 0, top: 0, width: 0, height: 0 });
  return true;
+});
+
+// 입력 제출/취소
+ipcMain.on('input:submit', (_evt, text) => {
+  if (inputWindow && !inputWindow.isDestroyed()) inputWindow.close();
+  runCaptureAndComment({ userInput: String(text || '') });
+});
+ipcMain.on('input:cancel', () => {
+  if (inputWindow && !inputWindow.isDestroyed()) inputWindow.close();
+});
+
+// 입력창 리사이즈(180 -> 240 등). 앵커 유지해서 자연스럽게 확장
+ipcMain.on('input:resize', (_evt, payload = {}) => {
+  if (!inputWindow || inputWindow.isDestroyed()) return;
+  const { width, height } = payload;
+  const o = overlayWindow.getBounds();
+  const PAD = 16;
+  const cur = inputWindow.getBounds();
+  const newW = Math.max(120, Math.min(Number(width) || cur.width, 600));
+  const newH = Number(height) || cur.height;
+
+  let x = cur.x;
+  let y = cur.y;
+  if (inputAnchor === 'right') {
+    // 오른쪽 엣지를 고정: x를 왼쪽으로 이동
+    x = cur.x + (cur.width - newW);
+  }
+  // 화면 경계 보정
+  if (x < o.x + PAD) x = o.x + PAD;
+  if (x + newW > o.x + o.width - PAD) x = o.x + o.width - PAD - newW;
+  if (y < o.y + PAD) y = o.y + PAD;
+  if (y + newH > o.y + o.height - PAD) y = o.y + o.height - PAD - newH;
+
+  inputWindow.setBounds({ x, y, width: newW, height: newH });
 });
 
 // ---- [추가] LLM 출력 후처리 유틸 ----
@@ -511,7 +555,7 @@ app.on('window-all-closed', (e) => e.preventDefault());
 
 
 =============================== FILE: preload.js ===============================
-(size: 569 bytes)
+(size: 691 bytes)
 
 
 // preload.js
@@ -524,6 +568,8 @@ contextBridge.exposeInMainWorld('api', {
   getStore: () => ipcRenderer.invoke('store:get'),
   setIconPos: (pos) => ipcRenderer.invoke('store:setIconPos', pos),
   setOverlayPassthrough: (ignore) => ipcRenderer.send('overlay:passthrough', ignore),
+  openInputAt: (rect) => ipcRenderer.invoke('input:open', rect),
+  cancelInput: () => ipcRenderer.send('input:cancel'),
 });
 
 
@@ -661,139 +707,8 @@ export function disableTooltipHitTest() {
 </html>
 
 
-======================= FILE: renderer/input-bubble.css ========================
-(size: 649 bytes)
-
-/* 툴팁 스타일 입력 버블 */
-#commenter-input-bubble {
-position: fixed;
-z-index: 2147483647; /* 최상단 */
-display: none;
-min-width: 280px;
-max-width: 480px;
-padding: 10px 12px;
-border-radius: 14px;
-backdrop-filter: blur(12px);
--webkit-backdrop-filter: blur(12px);
-background: rgba(20, 20, 24, 0.45);
-border: 1px solid rgba(255,255,255,0.14);
-box-shadow: 0 6px 24px rgba(0,0,0,0.25);
-}
-#commenter-input-bubble input {
-width: 100%;
-outline: none;
-border: none;
-background: transparent;
-color: #fff;
-font-size: 14px;
-}
-#commenter-input-bubble .hint {
-margin-top: 6px;
-font-size: 11px;
-opacity: 0.7;
-color: #ddd;
-}
-
-======================== FILE: renderer/input-bubble.js ========================
-(size: 2266 bytes)
-
-// 입력 버블 초기화. 아이콘 엘리먼트에 data-commenter-icon 속성을 달아두면 자동 부착됩니다.
-
-export function initCommenterInputBubble() {
-const ICON_SELECTORS = [
-'[data-commenter-icon]',
-'.commenter-icon',
-'#commenter-icon'
-];
-
-
-let iconEl = null;
-for (const sel of ICON_SELECTORS) {
-const el = document.querySelector(sel);
-if (el) { iconEl = el; break; }
-}
-
-
-// 없으면 종료
-if (!iconEl) return;
-
-
-// 버블 DOM 생성
-const bubble = document.createElement('div');
-bubble.id = 'commenter-input-bubble';
-bubble.innerHTML = `
-<input id="commenter-input" type="text" placeholder="<여기에 입력할 수 있게>" autocomplete="off" />
-<div class="hint">Enter: 캡처 & 코멘트 · Esc: 닫기</div>
-`;
-document.body.appendChild(bubble);
-
-
-const input = bubble.querySelector('#commenter-input');
-
-
-function openBubble() {
-// 포인터 인터랙션 허용, 오버레이에 포커스 부여
-window.api?.setOverlayPassthrough(false);
-window.focus?.();
-
-
-// 아이콘 기준 위치 계산(오른쪽 8px)
-const r = iconEl.getBoundingClientRect();
-const gap = 8;
-bubble.style.left = Math.round(r.right + gap) + 'px';
-bubble.style.top = Math.round(r.top) + 'px';
-bubble.style.display = 'block';
-
-
-setTimeout(() => input.focus(), 0);
-}
-
-
-function closeBubble() {
-bubble.style.display = 'none';
-input.value = '';
-// 다시 클릭 통과 모드
-window.api?.setOverlayPassthrough(true);
-}
-
-
-// 아이콘 클릭 → 열기
-iconEl.addEventListener('click', (e) => {
-e.preventDefault();
-openBubble();
-});
-
-
-// 외부 클릭 → 닫기
-document.addEventListener('mousedown', (e) => {
-if (bubble.style.display !== 'block') return;
-if (!bubble.contains(e.target) && e.target !== iconEl) {
-closeBubble();
-}
-});
-
-
-// 키 처리 (Enter 제출, Esc 닫기)
-input.addEventListener('keydown', async (e) => {
-if (e.isComposing || e.keyCode === 229) return; // IME 조합 중이면 무시
-if (e.key === 'Enter') {
-e.preventDefault();
-const text = input.value.trim();
-closeBubble();
-try {
-await window.api?.triggerComment(text);
-} catch (err) {
-console.error('triggerComment error', err);
-}
-} else if (e.key === 'Escape') {
-e.preventDefault();
-closeBubble();
-}
-});
-}
-
 ======================= FILE: renderer/input-preload.js ========================
-(size: 253 bytes)
+(size: 338 bytes)
 
 // renderer/input-preload.js
 const { contextBridge, ipcRenderer } = require('electron');
@@ -802,10 +717,11 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('apiInput', {
 submit: (text) => ipcRenderer.send('input:submit', text),
 cancel: () => ipcRenderer.send('input:cancel'),
+resize: ({ width, height }) => ipcRenderer.send('input:resize', { width, height }),
 });
 
 =========================== FILE: renderer/input.css ===========================
-(size: 578 bytes)
+(size: 513 bytes)
 
 :root{
 --glass-bg: rgba(255,255,255,0.86);
@@ -819,10 +735,8 @@ width:100%; height:100%;
 display:flex; align-items:center; justify-content:center;
 background: var(--glass-bg);
 backdrop-filter: blur(4px);
-border:1px solid var(--glass-brd);
-border-radius:14px;
-box-shadow: var(--shadow);
-padding:8px 10px;
+border-radius:4px;
+padding:2px 10px;
 }
 #q{
 width:100%;
@@ -831,7 +745,7 @@ border:none; outline:none; background:transparent; color:#111;
 }
 
 ========================== FILE: renderer/input.html ===========================
-(size: 536 bytes)
+(size: 517 bytes)
 
 <!doctype html>
 <html lang="ko">
@@ -844,34 +758,49 @@ border:none; outline:none; background:transparent; color:#111;
 </head>
 <body>
 <div id="wrap">
-<input id="q" type="text" placeholder="<여기에 입력할 수 있게>" autocomplete="off" />
+<input id="q" type="text" placeholder="입력 중..." autocomplete="off" />
 </div>
 <script src="./input.js"></script>
 </body>
 </html>
 
 =========================== FILE: renderer/input.js ============================
-(size: 638 bytes)
+(size: 1077 bytes)
 
 // renderer/input.js
 const input = document.getElementById('q');
 
+let grown = false;
+
 
 window.addEventListener('DOMContentLoaded', () => {
-setTimeout(() => input.focus({ preventScroll: true }), 0);
+    setTimeout(() => input.focus({ preventScroll: true }), 0);
+  // 열릴 때 180 -> 240 한 번 확장
+  setTimeout(() => {
+    if (!grown) {
+      window.apiInput.resize({ width: 240 });
+      grown = true;
+    }
+  }, 60);
 });
 
 
 // Enter: 제출(Shift+Enter는 줄바꿈), Esc: 취소
-input.addEventListener('keydown', (e) => {
-if (e.key === 'Enter' && !e.shiftKey) {
-e.preventDefault();
-const v = input.value.trim();
-window.apiInput.submit(v);
-} else if (e.key === 'Escape') {
-e.preventDefault();
-window.apiInput.cancel();
-}
+    input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    const v = input.value.trim();
+    window.apiInput.submit(v);
+    } else if (e.key === 'Escape') {
+    e.preventDefault();
+    window.apiInput.cancel();
+      } else {
+    // 최초 타이핑 시에도 확장 보장(혹시 DOMContentLoaded 타이밍 놓친 경우)
+    if (!grown) {
+      window.apiInput.resize({ width: 240 });
+      grown = true;
+    }
+   }
 });
 
 
@@ -881,7 +810,7 @@ window.apiInput.cancel();
 });
 
 ========================== FILE: renderer/renderer.js ==========================
-(size: 10152 bytes)
+(size: 10363 bytes)
 
 
 // renderer.js (overlay click-through control + accurate tooltip position)
@@ -890,7 +819,7 @@ const tooltipEl = document.getElementById('tooltip');
 const tooltipTextEl = document.getElementById('tooltip-text');
 const spinnerEl = document.getElementById('spinner');
 
-const TTL_MS = 60000; // 5분
+const TTL_MS = 60000; // 1분
 let hideTimer = null;
 const EDGE = 16;
 let skipNextClick = false;
@@ -935,7 +864,11 @@ window.api.onError((_err) => {
   hideTimer = setTimeout(() => hideTooltip(), TTL_MS);
 });
 
-tooltipEl.addEventListener('click', hideTooltip);
+tooltipEl.addEventListener('click', () => {
+  hideTooltip();
+  // 툴팁 클릭으로 오버레이만 만진 경우, 입력창 포커스가 안 바뀌어 남아있을 수 있음 → 강제 닫기
+  window.api.cancelInput();
+});
 
 function showTooltip(content, opts = {}) {
   const { isHTML = false } = opts;
@@ -963,6 +896,7 @@ iconEl.addEventListener('pointerenter', () => window.api.setOverlayPassthrough(f
 iconEl.addEventListener('pointerleave', () => { if (!dragging) syncOverlayPassthrough(); });
 
 iconEl.addEventListener('pointerdown', (e) => {
+  window.api.cancelInput();
   dragging = true;
   iconEl.setPointerCapture(e.pointerId);
   const rect = iconEl.getBoundingClientRect();

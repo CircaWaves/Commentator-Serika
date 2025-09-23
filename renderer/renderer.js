@@ -50,7 +50,11 @@ window.api.onError((_err) => {
   hideTimer = setTimeout(() => hideTooltip(), TTL_MS);
 });
 
-tooltipEl.addEventListener('click', hideTooltip);
+tooltipEl.addEventListener('click', () => {
+  hideTooltip();
+  // 툴팁 클릭으로 오버레이만 만진 경우, 입력창 포커스가 안 바뀌어 남아있을 수 있음 → 강제 닫기
+  window.api.cancelInput();
+});
 
 function showTooltip(content, opts = {}) {
   const { isHTML = false } = opts;
@@ -78,6 +82,7 @@ iconEl.addEventListener('pointerenter', () => window.api.setOverlayPassthrough(f
 iconEl.addEventListener('pointerleave', () => { if (!dragging) syncOverlayPassthrough(); });
 
 iconEl.addEventListener('pointerdown', (e) => {
+  window.api.cancelInput();
   dragging = true;
   iconEl.setPointerCapture(e.pointerId);
   const rect = iconEl.getBoundingClientRect();

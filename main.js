@@ -23,6 +23,7 @@ const PROMPT_VERSION = 'v3-system-user-split';
 let overlayWindow = null;
 let store = null;
 let inputWindow = null;
+let inputAnchor = 'left';
 
 // lazy-load ESM module (@google/generative-ai)
 let _genaiModule = null;
@@ -346,16 +347,22 @@ function openInputWindow(iconRect) {
  const o = overlayWindow.getBounds();
  const PAD = 16;
  const GAP = 12;
- const winW = 340;
- const winH = 48;
+ const winW = 180;
+ const winH = 44;
 
- // 기본: 아이콘 오른쪽
+  // 기본: 아이콘 오른쪽
  let x = o.x + Math.round(iconRect.left + iconRect.width + GAP);
+
  let y = o.y + Math.round(iconRect.top + (iconRect.height - winH) / 2);
 
  // 우측 공간 부족 시 왼쪽으로 플립
  if (x + winW > o.x + o.width - PAD) {
- x = o.x + Math.round(iconRect.left - GAP - winW);
+   // 아이콘 왼쪽에 배치
+   x = o.x + Math.round(iconRect.left - GAP - winW);
+   inputAnchor = 'right'; // 오른쪽 엣지를 고정(=왼쪽으로 확장)
+ } else {
+   // 아이콘 오른쪽에 배치
+   inputAnchor = 'left';  // 왼쪽 엣지를 고정(=오른쪽으로 확장)
  }
  // 화면 경계 보정
  x = Math.max(o.x + PAD, Math.min(x, o.x + o.width - PAD - winW));
@@ -369,7 +376,7 @@ function openInputWindow(iconRect) {
  frame: false,
  transparent: true,
  resizable: false,
- hasShadow: true,
+ hasShadow: false,
  focusable: true,
  skipTaskbar: true,
  fullscreenable: false,
@@ -401,6 +408,31 @@ ipcMain.on('input:submit', (_evt, text) => {
 });
 ipcMain.on('input:cancel', () => {
   if (inputWindow && !inputWindow.isDestroyed()) inputWindow.close();
+});
+
+// 입력창 리사이즈(180 -> 240 등). 앵커 유지해서 자연스럽게 확장
+ipcMain.on('input:resize', (_evt, payload = {}) => {
+  if (!inputWindow || inputWindow.isDestroyed()) return;
+  const { width, height } = payload;
+  const o = overlayWindow.getBounds();
+  const PAD = 16;
+  const cur = inputWindow.getBounds();
+  const newW = Math.max(120, Math.min(Number(width) || cur.width, 600));
+  const newH = Number(height) || cur.height;
+
+  let x = cur.x;
+  let y = cur.y;
+  if (inputAnchor === 'right') {
+    // 오른쪽 엣지를 고정: x를 왼쪽으로 이동
+    x = cur.x + (cur.width - newW);
+  }
+  // 화면 경계 보정
+  if (x < o.x + PAD) x = o.x + PAD;
+  if (x + newW > o.x + o.width - PAD) x = o.x + o.width - PAD - newW;
+  if (y < o.y + PAD) y = o.y + PAD;
+  if (y + newH > o.y + o.height - PAD) y = o.y + o.height - PAD - newH;
+
+  inputWindow.setBounds({ x, y, width: newW, height: newH });
 });
 
 // ---- [추가] LLM 출력 후처리 유틸 ----
