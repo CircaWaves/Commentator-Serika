@@ -11,9 +11,8 @@ display:flex; align-items:center; justify-content:center;
 background: var(--glass-bg);
 backdrop-filter: blur(4px);
 border:1px solid var(--glass-brd);
-border-radius:14px;
-box-shadow: var(--shadow);
-padding:8px 10px;
+border-radius:6px;
+padding:4px 10px;
 }
 #q{
 width:100%;
