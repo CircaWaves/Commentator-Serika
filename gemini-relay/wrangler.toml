@@ -1,0 +1,4 @@
+# gemini-relay/wrangler.toml
+name = "gemini-relay"
+main = "src/index.js"
+compatibility_date = "2024-11-11"

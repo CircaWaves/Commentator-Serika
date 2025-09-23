@@ -1,0 +1,21 @@
+{
+  "name": "gemini-screen-commenter",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Fullscreen capture -> Gemini 2.5 Flash comment -> blurred tooltip above always-on-top draggable icon (overlay full-screen, click-through)",
+  "main": "main.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron .",
+    "bundle:txt": "node pack-to-txt.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "dotenv": "^16.4.5",
+    "undici": "^6.21.3"
+  },
+  "devDependencies": {
+    "electron": "^38.1.2"
+  }
+}

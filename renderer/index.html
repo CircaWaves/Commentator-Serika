@@ -1,0 +1,39 @@
+
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' data: https://cdn.jsdelivr.net https://unpkg.com; img-src 'self' data:;">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gemini Screen Commenter</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css">
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div id="root">
+    <div id="icon" class="icon" title="스페이스바로 코멘트 생성">
+      <img id="icon-img" src="./icon.jpg" alt="comment icon"
+          onerror="this.style.display='none';document.getElementById('icon-fallback').style.display='block';" />
+      <svg id="icon-fallback" viewBox="0 0 24 24" width="18" height="18" style="display:none">
+        <circle cx="12" cy="12" r="10" />
+        <path d="M7 10h10M7 14h6" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+      </svg>
+      <div id="spinner" class="spinner hidden"></div>
+    </div>
+    <div id="tooltip" class="tooltip hidden" role="status" aria-live="polite">
+      <div id="tooltip-text"></div>
+    </div>
+  </div>
+  <script src="./renderer.js"></script>
+<script type="module">
+  import { enableTooltipHitTest } from './hittest.js';
+  const api = window.api;
+  const tipEl  = document.getElementById('tooltip');
+  const iconEl = document.getElementById('icon');
+  // 시작은 항상 통과 상태로
+  api.setOverlayPassthrough(true);
+  // 히트테스트를 한 번만 켜고, 두 요소를 함께 넘긴다
+  enableTooltipHitTest(tipEl, iconEl);
+</script>
+</body>
+</html>

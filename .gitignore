@@ -1,0 +1,12 @@
+node_modules/
+dist/
+build/
+out/
+*.log
+.DS_Store
+.env
+.env.*
+# electron 빌드 산출물
+*.asar
+*.app
+release/
