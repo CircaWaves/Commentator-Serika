@@ -5,9 +5,11 @@ const tooltipEl = document.getElementById('tooltip');
 const tooltipTextEl = document.getElementById('tooltip-text');
 const spinnerEl = document.getElementById('spinner');
 
-const TTL_MS = 60000; // 5분
+const TTL_MS = 60000; // 1분
 let hideTimer = null;
 const EDGE = 16;
+let skipNextClick = false;
+let dragStartX = 0, dragStartY = 0, movedWhileDrag = false;
 
 function clamp(v, min, max){ return Math.min(Math.max(v, min), max); }
 
@@ -81,11 +83,15 @@ iconEl.addEventListener('pointerdown', (e) => {
   const rect = iconEl.getBoundingClientRect();
   offsetX = e.clientX - rect.left;
   offsetY = e.clientY - rect.top;
+  dragStartX = e.clientX; dragStartY = e.clientY; movedWhileDrag = false;
   syncOverlayPassthrough();
 });
 
 iconEl.addEventListener('pointermove', (e) => {
   if (!dragging) return;
+  if (!movedWhileDrag && (Math.abs(e.clientX - dragStartX) > 3 || Math.abs(e.clientY - dragStartY) > 3)) {
+  movedWhileDrag = true;
+  }
   const x = e.clientX - offsetX;
   const y = e.clientY - offsetY;
   setIconPosition(x, y);
@@ -96,7 +102,14 @@ iconEl.addEventListener('pointerup', async (e) => {
   iconEl.releasePointerCapture(e.pointerId);
   const rect = iconEl.getBoundingClientRect();
   await window.api.setIconPos({ x: rect.left, y: rect.top });
+  if (movedWhileDrag) skipNextClick = true; // 드래그한 경우 다음 click 무시
   syncOverlayPassthrough();
+});
+
+iconEl.addEventListener('click', () => {
+ if (skipNextClick) { skipNextClick = false; return; }
+ const r = iconEl.getBoundingClientRect();
+ window.api.openInputAt({ left: r.left, top: r.top, width: r.width, height: r.height });
 });
 
 function setIconPosition(x, y) {

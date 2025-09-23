@@ -22,6 +22,7 @@ const PROMPT_VERSION = 'v3-system-user-split';
 
 let overlayWindow = null;
 let store = null;
+let inputWindow = null;
 
 // lazy-load ESM module (@google/generative-ai)
 let _genaiModule = null;
@@ -97,48 +98,49 @@ function fitOverlayToPrimary() {
   overlayWindow.setBounds({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height });
 }
 
+async function runCaptureAndComment({ userInput = '' } = {}) {
+ try {
+ const { filePath, dataURL } = await capturePrimaryDisplay();
+ overlayWindow.webContents.send('comment:status', { status: 'capturing', filePath });
+
+ const sBefore = store.read();
+ const prevMessage = sBefore?.comments?.[0]?.message ?? null;
+
+ const systemInstruction = buildSystemInstruction();
+ const userPrompt = buildUserPrompt(prevMessage, userInput);
+
+ const raw = await generateCommentWithGemini({ dataURL, systemInstruction, userPrompt });
+ const commentOnly = padForTooltipLeftClip(extractCommentOnly(raw));
+
+ const createdAt = Date.now();
+ const rec = {
+ id: crypto.randomUUID(),
+ createdAt,
+ screenshotPath: filePath,
+ message: commentOnly,
+ rawMessage: raw,
+ durationMs: 60000,
+ model: MODEL_ID,
+ promptVersion: PROMPT_VERSION
+ };
+
+ const s = store.read();
+ s.comments.unshift(rec);
+ s.comments = s.comments.slice(0, 1000);
+ store.write(s);
+
+ overlayWindow.webContents.send('comment:received', rec);
+ } catch (e) {
+ console.error('Capture/Comment Error:', e);
+ overlayWindow.webContents.send('comment:error', { message: e.message || '오류가 발생했습니다.' });
+ }
+}
+
 function registerHotkey() {
-  const ok = globalShortcut.register(HOTKEY, async () => {
-    try {
-      const { filePath, dataURL } = await capturePrimaryDisplay();
-      overlayWindow.webContents.send('comment:status', { status: 'capturing', filePath });
-
-      // 직전 답변 하나만 로드
-      const sBefore = store.read();
-      const prevMessage = sBefore?.comments?.[0]?.message ?? null;
-
-      // 시스템/유저 프롬프트 분리 생성
-      const systemInstruction = buildSystemInstruction();
-      const userPrompt = buildUserPrompt(prevMessage);
-
-      const raw = await generateCommentWithGemini({ dataURL, systemInstruction, userPrompt });
-      const commentOnly = padForTooltipLeftClip(extractCommentOnly(raw));
-
-      const createdAt = Date.now();
-      const rec = {
-        id: crypto.randomUUID(),
-        createdAt,
-        screenshotPath: filePath,
-        message: commentOnly,       // ← 툴팁에 "3) 코멘트"만 들어가도록
-        rawMessage: raw,            // (옵션) 원문도 남겨두면 디버깅에 좋아요
-        durationMs: 60000, // 1분
-        model: MODEL_ID,
-        promptVersion: PROMPT_VERSION
-      };
-
-      // persist
-      const s = store.read();
-      s.comments.unshift(rec);
-      s.comments = s.comments.slice(0, 1000);
-      store.write(s);
-
-      overlayWindow.webContents.send('comment:received', rec);
-    } catch (e) {
-      console.error('Capture/Comment Error:', e);
-      overlayWindow.webContents.send('comment:error', { message: e.message || '오류가 발생했습니다.' });
-    }
-  });
-  if (!ok) console.warn('Global hotkey registration failed.');
+ const ok = globalShortcut.register(HOTKEY, () => {
+ runCaptureAndComment({ userInput: '' });
+ });
+ if (!ok) console.warn('Global hotkey registration failed.');
 }
 
 async function getScreenThumbnail(displayId, reqSize, tries = 3) {
@@ -237,7 +239,7 @@ function buildSystemInstruction() {
   ].join('\n');
 }
 
-function buildUserPrompt(prevMessage) {
+function buildUserPrompt(prevMessage, userInput = '') {
   const prev = (prevMessage && prevMessage.trim())
     ? prevMessage.trim()
     : '[이전 답변 없음 (최초실행)]';
@@ -248,6 +250,7 @@ function buildUserPrompt(prevMessage) {
     '[이전 답변(참고용)]',
     prev,
     '',
+    ...(userInput ? ['[사용자 입력]', userInput, ''] : []),
     '[지시]',
     '- 코멘트는 문장 외 다른 요소를 포함하지 말 것. (예: 괄호)'
   ].join('\n');
@@ -334,6 +337,70 @@ ipcMain.on('overlay:passthrough', (_evt, ignore) => {
       }
     }, FAILSAFE_MS);
   }
+});
+
+
+// ---- 입력창(별도 포커스 가능 윈도우) ----
+function openInputWindow(iconRect) {
+ if (!overlayWindow || overlayWindow.isDestroyed()) return;
+ const o = overlayWindow.getBounds();
+ const PAD = 16;
+ const GAP = 12;
+ const winW = 340;
+ const winH = 48;
+
+ // 기본: 아이콘 오른쪽
+ let x = o.x + Math.round(iconRect.left + iconRect.width + GAP);
+ let y = o.y + Math.round(iconRect.top + (iconRect.height - winH) / 2);
+
+ // 우측 공간 부족 시 왼쪽으로 플립
+ if (x + winW > o.x + o.width - PAD) {
+ x = o.x + Math.round(iconRect.left - GAP - winW);
+ }
+ // 화면 경계 보정
+ x = Math.max(o.x + PAD, Math.min(x, o.x + o.width - PAD - winW));
+ y = Math.max(o.y + PAD, Math.min(y, o.y + o.height - PAD - winH));
+
+ if (inputWindow && !inputWindow.isDestroyed()) inputWindow.close();
+
+ inputWindow = new BrowserWindow({
+ x, y, width: winW, height: winH,
+ alwaysOnTop: true,
+ frame: false,
+ transparent: true,
+ resizable: false,
+ hasShadow: true,
+ focusable: true,
+ skipTaskbar: true,
+ fullscreenable: false,
+ backgroundColor: '#00000000',
+ webPreferences: {
+ preload: path.join(__dirname, 'renderer', 'input-preload.js'),
+ contextIsolation: true,
+ nodeIntegration: false,
+ sandbox: true,
+ }
+ });
+  inputWindow.setAlwaysOnTop(true, 'screen-saver');
+  if (inputWindow.setVisibleOnAllWorkspaces) {
+    inputWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  }
+ inputWindow.loadFile(path.join(__dirname, 'renderer', 'input.html'));
+ inputWindow.on('closed', () => { inputWindow = null; });
+}
+
+ipcMain.handle('input:open', (_evt, iconRect) => {
+ openInputWindow(iconRect || { left: 0, top: 0, width: 0, height: 0 });
+ return true;
+});
+
+// 입력 제출/취소
+ipcMain.on('input:submit', (_evt, text) => {
+  if (inputWindow && !inputWindow.isDestroyed()) inputWindow.close();
+  runCaptureAndComment({ userInput: String(text || '') });
+});
+ipcMain.on('input:cancel', () => {
+  if (inputWindow && !inputWindow.isDestroyed()) inputWindow.close();
 });
 
 // ---- [추가] LLM 출력 후처리 유틸 ----

@@ -9,4 +9,5 @@ contextBridge.exposeInMainWorld('api', {
   getStore: () => ipcRenderer.invoke('store:get'),
   setIconPos: (pos) => ipcRenderer.invoke('store:setIconPos', pos),
   setOverlayPassthrough: (ignore) => ipcRenderer.send('overlay:passthrough', ignore),
+  openInputAt: (rect) => ipcRenderer.invoke('input:open', rect),
 });
