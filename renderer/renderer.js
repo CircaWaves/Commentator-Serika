@@ -35,9 +35,8 @@ window.api.onStatus(({ status }) => {
 window.api.onComment((rec) => {
   spinnerEl.classList.add('hidden');
 
-  // ⬇️ 전체 대신 '코멘트만'
-  const commentOnly = extractCommentOnly(rec.message);
-  showTooltip(commentOnly); // isHTML 옵션 없이 순수 텍스트로
+  // main.js에서 이미 코멘트만 + NBSP 패딩까지 붙여 왔음
+  showTooltip(rec.message); // 그대로 표시
 
   if (hideTimer) clearTimeout(hideTimer);
   hideTimer = setTimeout(() => hideTooltip(), TTL_MS);

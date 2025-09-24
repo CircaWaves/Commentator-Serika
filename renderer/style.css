@@ -16,6 +16,7 @@
 #icon, #tooltip, #tooltip * { pointer-events: auto; }
 
 
+
 * { box-sizing: border-box; }
 html, body {
   margin: 0;
@@ -87,7 +88,7 @@ html, body {
 
 .tooltip { cursor: pointer; }  /* 클릭하면 닫힌다는 걸 시각적으로 암시 */
 
-#tooltip-text { white-space: pre-wrap; word-break: break-word; }
+#tooltip-text { white-space: pre-wrap; word-break: break-word; padding-left: 2px; }
 
 .tooltip .sect { margin-top: 6px; }
 .tooltip .sect:first-child { margin-top: 0; }
