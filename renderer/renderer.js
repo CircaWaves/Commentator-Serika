@@ -172,7 +172,10 @@ function escapeHTML(s) {
 }
 
 function extractCommentOnly(raw){
-  const text = String(raw ?? '').replace(/\r\n?/g, '\n').trim();
+ // NBSP(\u00A0)는 남기고 일반 공백만 트림
+ const text = String(raw ?? '')
+   .replace(/\r\n?/g, '\n')
+   .replace(/^[ \t\n\r]+|[ \t\n\r]+$/g, ''); // NBSP 제외
 
   // 1순위: 기존 파서를 통과해 3) 코멘트가 있으면 그거만
   const parsed = parseComment(text);
