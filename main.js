@@ -24,6 +24,7 @@ let overlayWindow = null;
 let store = null;
 let inputWindow = null;
 let inputAnchor = 'left';
+let inputSubmitBusy = false;
 
 // lazy-load ESM module (@google/generative-ai)
 let _genaiModule = null;
@@ -218,7 +219,7 @@ function buildSystemInstruction() {
     '3) 코멘트: <최종 반응 1~3 문장>',
     '',
     '[말투 고정 규칙]',
-    '- 사용자를 "선생님"이라 부름. 반말·평서 위주.',
+    '- 사용자를 "선생님"이라 부름. 반말 위주.',
     '- 군더더기 없는 단문, 명령·결의형 어미 자주 사용: "-할게." "-이거든." "-있네." "-알려줘." "-인 거 알지?" "-겠지" "-겠네" / “-군.”은 사용하지 말 것.',
     '- 담담+츤데레(선생님을 좋아하는 쑥쓰러움을 숨기기 위해 화내는 경우 있음, 그러나 선생의 메세지에 정면 반박은 안 함. "내가 있을 때만큼은 착실하게 일해···나도 도울테니까.). 칭찬/배려는 짧게 툭 던짐: "필요하면 나를 쓰라구." / "무리하지 말고." / "좋아, 잘했어."',
     '- 쓸데없는 미사여구 금지. 중요 포인트만 집어 말함. 단정은 피하고, 불명확하면 질문으로 처리.',
@@ -232,7 +233,7 @@ function buildSystemInstruction() {
     '- 사용자의 코멘트 요청은 맥락 전환이 빈번하니, 맥락이 과도하게 변하는 경우 가장 최근 중요사항에 대해 코멘트할 것',
     '- 텍스트에 대한 코멘트는 간략한 인용이나 재서술 및 근거 제시를 통해 자세히 반응하라(예: "여기서 중요한 건…" "이 부분이 핵심이네" 등).',
     '- 이전 답변과 발화 맥락이 동일하다면 텍스트에 대해 심층 분석해 새로운 관점에서의 질문, 어려운 개념에 대한 해설, 평가와 제안 중 한 성격의 코멘트를 반환하라.',    
-    '- 느낌표("!")를 사용하는 반어적인 표현 사용 "이딴 학원, 망해버려!" / "따, 딱히... 선생님을 위해서 노력한 건 아니니까!", ',
+    '- 주로 반어적인 표현 사용 "이딴 학원, 망해버려!" / "따, 딱히... 선생님을 위해서 노력한 건 아니니까!", ',
     '',
     '[금지/주의]',
     '- 이전 답변 코멘트와 중복된 취지의 답변 금지, 발화 맥락이 동일하다면 이전 답변보다 깊이있는 코멘트를 반환하라.',
@@ -405,9 +406,15 @@ ipcMain.handle('input:open', (_evt, iconRect) => {
 });
 
 // 입력 제출/취소
-ipcMain.on('input:submit', (_evt, text) => {
-  if (inputWindow && !inputWindow.isDestroyed()) inputWindow.close();
-  runCaptureAndComment({ userInput: String(text || '') });
+ipcMain.on('input:submit', async (_evt, text) => {
+  if (inputSubmitBusy) return;           // ★ 중복 드롭
+  inputSubmitBusy = true;
+  try {
+    if (inputWindow && !inputWindow.isDestroyed()) inputWindow.close();
+    await runCaptureAndComment({ userInput: String(text || '') });
+  } finally {
+    inputSubmitBusy = false;
+  }
 });
 ipcMain.on('input:cancel', () => {
   if (inputWindow && !inputWindow.isDestroyed()) inputWindow.close();

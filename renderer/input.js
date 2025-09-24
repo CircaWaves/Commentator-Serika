@@ -1,8 +1,7 @@
 // renderer/input.js
-const input = document.getElementById('q');
-
-let grown = false;
-
+ const input = document.getElementById('q');
+ let grown = false;
+ let submitted = false;
 
 window.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => input.focus({ preventScroll: true }), 0);
@@ -19,9 +18,11 @@ window.addEventListener('DOMContentLoaded', () => {
 // Enter: 제출(Shift+Enter는 줄바꿈), Esc: 취소
     input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    const v = input.value.trim();
-    window.apiInput.submit(v);
+      if (submitted || e.repeat) return;     // ★ 중복/반복 차단
+      e.preventDefault();
+      submitted = true;
+      const v = input.value.trim();
+      window.apiInput.submit(v);
     } else if (e.key === 'Escape') {
     e.preventDefault();
     window.apiInput.cancel();
@@ -37,5 +38,5 @@ window.addEventListener('DOMContentLoaded', () => {
 
 // 창 바깥 클릭/포커스 아웃 시 닫기(선택)
 window.addEventListener('blur', () => {
-window.apiInput.cancel();
+  if (!submitted) window.apiInput.cancel(); // ★ 이미 submit했다면 취소 안 보냄
 });
