@@ -112,7 +112,7 @@ async function runCaptureAndComment({ userInput = '' } = {}) {
  const userPrompt = buildUserPrompt(prevMessage, userInput);
 
  const raw = await generateCommentWithGemini({ dataURL, systemInstruction, userPrompt });
- const commentOnly = padForTooltipLeftClip(extractCommentOnly(raw));
+ const commentOnly = extractCommentOnly(raw);
 
  const createdAt = Date.now();
  const rec = {
